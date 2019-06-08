@@ -251,6 +251,11 @@ if ! hash curl 2>/dev/null && [ "${INSTALL_MISSING_DEPENDENCIES}" == "yes" ]; th
         OS=ubuntu
         grecho "You are using Debian/Ubuntu based linux, installing curl with apt since you passed -y"
         apt update && apt install -y curl
+    elif [ "${OSTYPE}" == "linux-gnu" ]; then
+        grecho "No curl executable found but we can use ermine-curl instead."
+        wget https://github.com/patrick0057/ermine-curl/releases/download/7.30/curl
+        checkpipecmd "Curl download failed, aborting script!"
+        install -o root -g root -m 755 curl /bin/curl
     else
         grecho '!!!curl was not found!!!'
         grecho 'Please install curl if you want to automatically install missing dependencies'

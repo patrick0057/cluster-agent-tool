@@ -57,19 +57,19 @@ while getopts "hyz:k:a:u:p:s:c:r:" opt; do
         ;;
     y) # process option y: auto install dependencies
         INSTALL_MISSING_DEPENDENCIES=yes
-        if [[ $EUID -ne 0 ]]; then
+        if [[ "${EUID}" -ne 0 ]]; then
             grecho "In order to automatically install dependencies please run this script as root."
             exit 1
         fi
         ;;
     a) # process option a: automatically apply yaml
         APPLY_YAML="yes"
-        SAVE_KUBECONFIG=${OPTARG}
+        SAVE_KUBECONFIG="${OPTARG}"
         ;;
     r) # process option r: run agent command on node
         RUN_AGENT="yes"
-        AGENT_OPTIONS=${OPTARG}
-        if [[ ${AGENT_OPTIONS} == "" ]]; then
+        AGENT_OPTIONS="${OPTARG}"
+        if [[ "${AGENT_OPTIONS}" == "" ]]; then
             grecho "You specified -r but did not provide any roles to be run with.  Please add some of or all of the following roles surrounded by double quotes.
             --etcd --controlplane --worker
             Example: -a \"--etcd --controlplane\""
@@ -88,7 +88,7 @@ while getopts "hyz:k:a:u:p:s:c:r:" opt; do
         ;;
     u) # process option u: set username
         RANCHER_USERNAME=${OPTARG}
-        if [[ ${RANCHER_USERNAME} == "" ]]; then
+        if [[ "${RANCHER_USERNAME}" == "" ]]; then
             grecho "You specified -u but did not supply a username."
             echo
             helpmenu
@@ -96,7 +96,7 @@ while getopts "hyz:k:a:u:p:s:c:r:" opt; do
         ;;
     p) # process option p: set username
         PASSWORD=${OPTARG}
-        if [[ ${PASSWORD} == "" ]]; then
+        if [[ "${PASSWORD}" == "" ]]; then
             grecho "You specified -p but did not supply a password."
             echo
             helpmenu
@@ -104,7 +104,7 @@ while getopts "hyz:k:a:u:p:s:c:r:" opt; do
         ;;
     s) # process option s: set CATTLE_SERVER
         CATTLE_SERVER=${OPTARG}
-        if [[ ${CATTLE_SERVER} == "" ]]; then
+        if [[ "${CATTLE_SERVER}" == "" ]]; then
             grecho "You specified -s but did not supply a rancher server URL."
             echo
             helpmenu
@@ -112,7 +112,7 @@ while getopts "hyz:k:a:u:p:s:c:r:" opt; do
         ;;
     c) # process option c: set CLUSTERID
         CLUSTERID=${OPTARG}
-        if [[ ${CLUSTERID}} == "" ]]; then
+        if [[ "${CLUSTERID}" == "" ]]; then
             grecho "You specified -c but did not supply a cluster ID."
             echo
             helpmenu
@@ -121,7 +121,7 @@ while getopts "hyz:k:a:u:p:s:c:r:" opt; do
     k) # process option k: set KUBECONFIG
         export KUBECONFIG=${OPTARG}
         MANUAL_KUBECONFIG=yes
-        if [[ ${KUBECONFIG}} == "" ]]; then
+        if [[ "${KUBECONFIG}" == "" ]]; then
             grecho "You specified -k but did not supply a kube config path."
             echo
             helpmenu
@@ -129,7 +129,7 @@ while getopts "hyz:k:a:u:p:s:c:r:" opt; do
         ;;
     z) # process option z: set SSLPREFIX path
         MANUALSSLPREFIX=${OPTARG}
-        if [[ ${MANUALSSLPREFIX}} == "" ]]; then
+        if [[ "${MANUALSSLPREFIX}" == "" ]]; then
             grecho "You specified -z but did not supply an ssl prefix path.  This is usually /etc/kubernetes/."
             echo
             helpmenu
@@ -145,7 +145,7 @@ function yesno() {
     shopt -s nocasematch
     response=''
     i=0
-    while [[ ${response} != 'y' ]] && [[ ${response} != 'n' ]]; do
+    while [[ "${response}" != 'y' ]] && [[ "${response}" != 'n' ]]; do
         i=$((i + 1))
         if [ $i -gt 10 ]; then
             grecho "Script is destined to loop forever, aborting!  Make sure your docker run command has -ti then try again."
@@ -203,7 +203,7 @@ function setusupthekubeconfig() {
     else
         K_ERROR2=${K_RESULT}
     fi
-    if [[ ${K_ERROR1} != "" ]] && [[ ${K_ERROR2} != "" ]]; then
+    if [[ "${K_ERROR1}" != "" ]] && [[ "${K_ERROR2}" != "" ]]; then
         grecho "kubectl command used to generate new kubectl command failed.  Your cluster certs might be expired.  Printing error below."
         grecho "One will be an error for an attempt against the wrong RKE version and the other will be your actual reason for failure."
         echo
@@ -227,10 +227,10 @@ function setusupthekubeconfig() {
         KUBEBACKUP="~/.kube/config-$(date +%Y-%m-%d--%H%M%S)"
         FILE="~/.kube/config"
         #expand full path
-        eval FILE=$FILE
-        eval KUBEBACKUP=$KUBEBACKUP
+        eval FILE=${FILE}
+        eval KUBEBACKUP=${KUBEBACKUP}
 
-        if [[ -f "$FILE" ]]; then
+        if [[ -f "${FILE}" ]]; then
             recho "Backing up ${FILE} to ${KUBEBACKUP}"
             mv ${FILE} ${KUBEBACKUP}
         fi
@@ -242,7 +242,7 @@ function setusupthekubeconfig() {
 
 }
 
-if ! hash curl 2>/dev/null && [ ${INSTALL_MISSING_DEPENDENCIES} == "yes" ]; then
+if ! hash curl 2>/dev/null && [ "${INSTALL_MISSING_DEPENDENCIES}" == "yes" ]; then
     if [[ -f /etc/redhat-release ]]; then
         OS=redhat
         grecho "You are using Red Hat based linux, installing curl with yum since you passed -y"
@@ -258,7 +258,7 @@ if ! hash curl 2>/dev/null && [ ${INSTALL_MISSING_DEPENDENCIES} == "yes" ]; then
     fi
 fi
 #Install kubectl if we're applying the cluster yaml and if we have passed -y to automatically install dependencies
-if ! hash kubectl 2>/dev/null && [[ ${APPLY_YAML} == "yes" ]]; then
+if ! hash kubectl 2>/dev/null && [[ "${APPLY_YAML}" == "yes" ]]; then
     if [ "${INSTALL_MISSING_DEPENDENCIES}" == "yes" ] && [ "${OSTYPE}" == "linux-gnu" ]; then
         recho "Installing kubectl..."
         curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
@@ -393,7 +393,7 @@ if [[ "${APPLY_YAML}" != "yes" ]] || [[ "${RUN_AGENT}" != "yes" ]]; then
         echo ${INSECURECOMMAND}
         echo
     fi
-    if [[ ${RUN_AGENT} != "yes" ]]; then
+    if [[ "${RUN_AGENT}" != "yes" ]]; then
         grecho "Below is your cluster's agent command.  If you didn't specify any roles with -r then you should not run the command below until you've added roles to it."
         echo ${AGENTCMD}
         echo
@@ -412,7 +412,7 @@ if [[ "${APPLY_YAML}" == "yes" ]] || [[ "${RUN_AGENT}" == "yes" ]]; then
         echo
         grecho "Should I proceed with applying the above curl|kubectl command?"
         yesno
-        if [[ ${response} == 'y' ]]; then
+        if [[ "${response}" == 'y' ]]; then
             if [[ "${MANUAL_KUBECONFIG}" != "yes" ]]; then
                 setusupthekubeconfig
             fi
@@ -424,13 +424,13 @@ if [[ "${APPLY_YAML}" == "yes" ]] || [[ "${RUN_AGENT}" == "yes" ]]; then
             grecho "Skipping YAML apply step."
         fi
     fi
-    if [[ ${RUN_AGENT} == "yes" ]]; then
+    if [[ "${RUN_AGENT}" == "yes" ]]; then
         grecho "Below is your cluster's agent command.  If you didn't specify any roles with -r then you should not run the command below until you've added roles to it."
         echo ${AGENTCMD}
         echo
         grecho "Should I proceed with applying the above docker run command?"
         yesno
-        if [[ ${response} == 'y' ]]; then
+        if [[ "${response}" == 'y' ]]; then
             recho "Running node agent command."
             eval ${AGENTCMD}
             checkpipecmd "Node agent command failed, aborting script!"

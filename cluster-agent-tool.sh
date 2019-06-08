@@ -3,6 +3,7 @@ red=$(tput setaf 1)
 green=$(tput setaf 2)
 reset=$(tput sgr0)
 TMPDIR=$(mktemp -d)
+export TERM=xterm-256color
 function grecho() {
     echo "${green}$1${reset}"
 }

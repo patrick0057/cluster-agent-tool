@@ -6,6 +6,10 @@ Download and help instructions:
 ```bash
 curl -LO https://github.com/patrick0057/cluster-agent-tool/raw/master/cluster-agent-tool.sh
 bash cluster-tool.sh -h
+
+#RancherOS
+wget https://github.com/patrick0057/cluster-agent-tool/raw/master/cluster-agent-tool.sh
+bash cluster-tool.sh -h
 ```
 
 The most basic way to use this script is to let it do everything except running the commands automatically for you and prompt you for your Rancher server password as shown below.  Please see the help menu for all available options.

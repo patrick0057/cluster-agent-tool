@@ -27,6 +27,8 @@ Usage: bash ${SCRIPT_NAME}
 
     -y              Automatically installs dependencies for you.   (Recommended)
 
+    -f              Automatically says yes to any questions asked by the script.  (Optional)
+
     -a ['save']     Automatically applies cluster YAML for you.  This will also generate a kube config for your local cluster.  If you want to use the config file after the script has completed pass 'save' as shown below to save the kube config to ~/.kube/config.  (Optional)
             Example: -a'save'
 
@@ -45,6 +47,7 @@ Usage: bash ${SCRIPT_NAME}
 
     -c <clusterID>  Manually set cluster ID for this cluster.  If -c is not passed then we will automatically detect the cluster ID for you based on the local cluster installed on this node.  If you are running this on an rke deployed local rancher cluster you need to pass this option as -c'local'.  (Optional)
             Example: -c'c-xkxh6'
+
     -k <kubecfg>    Manually set the full path to your kube config instead of generating one for you.  (Optional)
             Example: -k'/home/bob/.kube/config'
     
@@ -53,7 +56,7 @@ Usage: bash ${SCRIPT_NAME}
 "
     exit 1
 }
-while getopts "hyz:k:a:u:p:s:c:r:" opt; do
+while getopts "hyfz:k:a:u:p:s:c:r:" opt; do
     case ${opt} in
     h) # process option h
         helpmenu
@@ -69,6 +72,9 @@ while getopts "hyz:k:a:u:p:s:c:r:" opt; do
         APPLY_YAML="yes"
         SAVE_KUBECONFIG="${OPTARG}"
         ;;
+    f) # process option f: automatically answer yes to all questions
+        AUTOYES="yes"
+        ;;
     r) # process option r: run agent command on node
         RUN_AGENT="yes"
         AGENT_OPTIONS="${OPTARG}"
@@ -79,7 +85,7 @@ while getopts "hyz:k:a:u:p:s:c:r:" opt; do
             helpmenu
         fi
         RUN_ARRAY=(${AGENT_OPTIONS})
-        for ((i=0; i<${#RUN_ARRAY[@]}; i++)); do
+        for ((i = 0; i < ${#RUN_ARRAY[@]}; i++)); do
             if [[ "${RUN_ARRAY[$i]}" != "--etcd" ]] && [[ "${RUN_ARRAY[$i]}" != "--controlplane" ]] && [[ "${RUN_ARRAY[$i]}" != "--worker" ]]; then
                 grecho "You passed an invalid node role.  Listing what you specified below."
                 echo ${AGENT_OPTIONS}
@@ -148,6 +154,9 @@ function yesno() {
     shopt -s nocasematch
     response=''
     i=0
+    if [[ $AUTOYES == "yes" ]]; then
+        response='y'
+    fi
     while [[ "${response}" != 'y' ]] && [[ "${response}" != 'n' ]]; do
         i=$((i + 1))
         if [ $i -gt 10 ]; then
@@ -331,8 +340,8 @@ DEPENDENCIES="sed grep ip tr date cut"
 for CMD in $DEPENDENCIES; do
     hash $CMD 2>/dev/null
     if [[ "$?" == "1" ]]; then
-            grecho "$CMD was not found, please install with your package manager"
-            EXIT="exit 1"
+        grecho "$CMD was not found, please install with your package manager"
+        EXIT="exit 1"
     fi
     #Quit script if any other above matched, but let it finish reporting before doing so.
     ${EXIT}

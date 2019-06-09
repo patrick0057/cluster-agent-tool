@@ -16,8 +16,8 @@ function recho() {
 START_TIME=$(date +%Y-%m-%d--%H%M%S)
 SCRIPT_NAME="cluster-agent-tool.sh"
 # Login token good for 1 minute
-#TOKEN_TTL=60000
-TOKEN_TTL=6000000
+TOKEN_TTL=60000
+
 function helpmenu() {
     grecho "This script will help you retrieve redeployment commands for rancher agents as well as docker run commands to start new agent containers.  Depending on the options specified below you can also have the script automatically run these commands for you.
 

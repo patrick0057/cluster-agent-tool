@@ -1,9 +1,11 @@
 #!/bin/bash
-red=$(tput setaf 1)
-green=$(tput setaf 2)
-reset=$(tput sgr0)
+if hash tput 2>/dev/null; then
+    red=$(tput setaf 1)
+    green=$(tput setaf 2)
+    reset=$(tput sgr0)
+fi
 TMPDIR=$(mktemp -d)
-export TERM=xterm-256color
+UNAME=${uname-r}
 function grecho() {
     echo "${green}$1${reset}"
 }
@@ -14,8 +16,8 @@ function recho() {
 START_TIME=$(date +%Y-%m-%d--%H%M%S)
 SCRIPT_NAME="cluster-agent-tool.sh"
 # Login token good for 1 minute
-TOKEN_TTL=60000
-
+#TOKEN_TTL=60000
+TOKEN_TTL=6000000
 function helpmenu() {
     grecho "This script will help you retrieve redeployment commands for rancher agents as well as docker run commands to start new agent containers.  Depending on the options specified below you can also have the script automatically run these commands for you.
 
@@ -77,7 +79,7 @@ while getopts "hyz:k:a:u:p:s:c:r:" opt; do
             helpmenu
         fi
         RUN_ARRAY=(${AGENT_OPTIONS})
-        for i in "${RUN_ARRAY[@]}"; do
+        for ((i=0; i<${#RUN_ARRAY[@]}; i++)); do
             if [[ "${RUN_ARRAY[$i]}" != "--etcd" ]] && [[ "${RUN_ARRAY[$i]}" != "--controlplane" ]] && [[ "${RUN_ARRAY[$i]}" != "--worker" ]]; then
                 grecho "You passed an invalid node role.  Listing what you specified below."
                 echo ${AGENT_OPTIONS}
@@ -242,34 +244,63 @@ function setusupthekubeconfig() {
     fi
 
 }
+function download() {
+    if [[ "${DOWNLOADCMD}" == "wget" ]]; then
+        wget $*
+    else
+        curl -LO $*
+    fi
+}
 
-if ! hash curl 2>/dev/null && [ "${INSTALL_MISSING_DEPENDENCIES}" == "yes" ]; then
+function curlcmd() {
+    if [[ "${CURLCMD}" == "curl" ]]; then
+        curl "$@"
+    else
+        docker run --rm -ti patrick0057/curl "$@" | tr -d '\r'
+    fi
+}
+if ! hash curl 2>/dev/null && [[ "${INSTALL_MISSING_DEPENDENCIES}" == "yes" ]]; then
     if [[ -f /etc/redhat-release ]]; then
         OS=redhat
         grecho "You are using Red Hat based linux, installing curl with yum since you passed -y"
         yum install -y curl
+        export CURLCMD='curl'
     elif [[ -f /etc/lsb_release ]]; then
         OS=ubuntu
         grecho "You are using Debian/Ubuntu based linux, installing curl with apt since you passed -y"
         apt update && apt install -y curl
-    elif [ "${OSTYPE}" == "linux-gnu" ]; then
-        grecho "No curl executable found but we can use ermine-curl instead."
-        wget https://github.com/patrick0057/ermine-curl/releases/download/7.30/curl
-        checkpipecmd "Curl download failed, aborting script!"
-        install -o root -g root -m 755 curl /bin/curl
+        export CURLCMD='curl'
+    elif hash docker 2>/dev/null && [[ ! -f /etc/lsb_release ]] && [[ ! -f /etc/lsb_release ]]; then
+        grecho "No curl executable found but we can run curl from a docker container instead and use wget for downloads."
+        export CURLCMD='docker run --rm -ti patrick0057/curl'
+        export DOWNLOADCMD='wget'
+    fi
+else
+    export CURLCMD='curl'
+fi
+if ! hash curl 2>/dev/null; then
+    if hash docker 2>/dev/null; then
+        grecho "No curl executable found but we can run curl from a docker container instead and use wget for downloads."
+        export CURLCMD='docker run --rm -ti patrick0057/curl'
+        export DOWNLOADCMD='wget'
     else
         grecho '!!!curl was not found!!!'
         grecho 'Please install curl if you want to automatically install missing dependencies'
         exit 1
     fi
 fi
+
+if ! hash wget 2>/dev/null && [[ "${DOWNLOADCMD}" == "wget" ]]; then
+    grecho '!!!wget was not found!!!'
+    grecho 'Sorry no auto install for this one, please use your package manager.'
+    exit 1
+fi
 #Install kubectl if we're applying the cluster yaml and if we have passed -y to automatically install dependencies
 if ! hash kubectl 2>/dev/null && [[ "${APPLY_YAML}" == "yes" ]]; then
     if [ "${INSTALL_MISSING_DEPENDENCIES}" == "yes" ] && [ "${OSTYPE}" == "linux-gnu" ]; then
         recho "Installing kubectl..."
-        curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
-        chmod +x ./kubectl
-        mv ./kubectl /bin/kubectl
+        download "https://storage.googleapis.com/kubernetes-release/release/$(curlcmd -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
+        install -o root -g root -m 755 kubectl /bin/kubectl
     else
         grecho "!!!kubectl was not found!!!"
         grecho "!!!download and install with:"
@@ -284,9 +315,8 @@ fi
 if ! hash jq 2>/dev/null; then
     if [ "${INSTALL_MISSING_DEPENDENCIES}" == "yes" ] && [ "${OSTYPE}" == "linux-gnu" ]; then
         recho "Installing jq..."
-        curl -L -O https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64
-        chmod +x jq-linux64
-        mv jq-linux64 /bin/jq
+        download https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64
+        install -o root -g root -m 755 jq-linux64 /bin/jq
     else
         grecho '!!!jq was not found!!!'
         grecho "!!!download and install with:"
@@ -297,31 +327,17 @@ if ! hash jq 2>/dev/null; then
         exit 1
     fi
 fi
-if ! hash date 2>/dev/null && [[ "${SAVE_KUBECONFIG}" == "yes" ]]; then
-    grecho '!!!date was not found!!!'
-    grecho 'Sorry no auto install for this one, please use your package manager.'
-    exit 1
-fi
-if ! hash sed 2>/dev/null; then
-    grecho '!!!sed was not found!!!'
-    grecho 'Sorry no auto install for this one, please use your package manager.'
-    exit 1
-fi
-if ! hash cut 2>/dev/null; then
-    grecho '!!!cut was not found!!!'
-    grecho 'Sorry no auto install for this one, please use your package manager.'
-    exit 1
-fi
-if ! hash grep 2>/dev/null; then
-    grecho '!!!grep was not found!!!'
-    grecho 'Sorry no auto install for this one, please use your package manager.'
-    exit 1
-fi
-if ! hash ip 2>/dev/null; then
-    grecho '!!!ip was not found!!!'
-    grecho 'Sorry no auto install for this one, please use your package manager.'
-    exit 1
-fi
+DEPENDENCIES="sed grep ip tr date cut"
+for CMD in $DEPENDENCIES; do
+    hash $CMD 2>/dev/null
+    if [[ "$?" == "1" ]]; then
+            grecho "$CMD was not found, please install with your package manager"
+            EXIT="exit 1"
+    fi
+    #Quit script if any other above matched, but let it finish reporting before doing so.
+    ${EXIT}
+done
+
 #Auto set RANCHER_USERNAME if none was specified
 if [[ "${RANCHER_USERNAME}" == "" ]]; then
     RANCHER_USERNAME='admin'
@@ -347,13 +363,13 @@ if [[ "${CATTLE_SERVER}" == "" ]]; then
 fi
 
 #Get a temporary login token
-LOGINTOKEN=$(curl -k -s ''${CATTLE_SERVER}'/v3-public/localProviders/local?action=login' -H 'content-type: application/json' --data-binary '{"username":'\"${RANCHER_USERNAME}\"',"password":'\"${PASSWORD}\"',"ttl":'${TOKEN_TTL}'}' | jq -r .token)
+LOGINTOKEN=$(curlcmd -k -s ''${CATTLE_SERVER}'/v3-public/localProviders/local?action=login' -H 'content-type: application/json' --data-binary '{"username":'\"${RANCHER_USERNAME}\"',"password":'\"${PASSWORD}\"',"ttl":'${TOKEN_TTL}'}' | jq -r .token)
 checkpipecmd "Unable to get LOGINTOKEN, did you use the correct username and password?"
 checknullvar "${LOGINTOKEN}" "Unable to get LOGINTOKEN, did you use the correct username and password?" "exit1"
 
 if [[ "${CLUSTERID}" == "" ]]; then
     #store /v3/clusters output
-    CLUSTERS=$(curl -k -s ''${CATTLE_SERVER}'/v3/clusters' -H 'content-type: application/json' -H "Authorization: Bearer ${LOGINTOKEN}")
+    CLUSTERS=$(curlcmd -k -s "${CATTLE_SERVER}/v3/clusters" -H "content-type: application/json" -H "Authorization: Bearer ${LOGINTOKEN}")
     checkpipecmd "Unable to get CLUSTERID on my own, please set CLUSTERID manually with -c"
     #Store nodeId
     NODEID=$(jq -r '.data[]?.appliedSpec.rancherKubernetesEngineConfig.nodes[]? | select(.address == '\"${DEFAULT_IP}\"') | .nodeId' <<<${CLUSTERS})
@@ -363,7 +379,7 @@ if [[ "${CLUSTERID}" == "" ]]; then
 fi
 
 #Store /v3/clusterregistration output
-CLUSTERREGISTRATION=$(curl -k -s ''${CATTLE_SERVER}'/v3/clusterregistrationtoken?clusterId='${CLUSTERID}'' -H 'content-type: application/json' -H "Authorization: Bearer ${LOGINTOKEN}")
+CLUSTERREGISTRATION=$(curlcmd -k -s ''${CATTLE_SERVER}'/v3/clusterregistrationtoken?clusterId='${CLUSTERID}'' -H 'content-type: application/json' -H "Authorization: Bearer ${LOGINTOKEN}")
 checkpipecmd "Unable to store CLUSTERREGISTRATION, not sure what happened either.  Re-run script using bash -x for more information."
 checknullvar "${CLUSTERREGISTRATION}" "Unable to store CLUSTERREGISTRATION, not sure what happened either.  Re-run script using bash -x for more information." "exit1"
 

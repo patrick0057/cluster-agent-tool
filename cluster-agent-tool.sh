@@ -358,11 +358,13 @@ if [[ "${PASSWORD}" == "" ]]; then
     read -s PASSWORD
     echo
 fi
+
+#get default route interface
+DEFAULT_ROUTE_IFACE=$(ip route | grep default | cut -d' ' -f5)
+#Get local IP for determining cluster ID
+DEFAULT_IP="$(ip a show ${DEFAULT_ROUTE_IFACE} | grep inet | grep -v inet6 | awk '{print $2}' | cut -f1 -d'/')"
+
 if [[ "${CATTLE_SERVER}" == "" ]]; then
-    #get default route interface
-    DEFAULT_ROUTE_IFACE=$(ip route | grep default | cut -d' ' -f5)
-    #Get local IP for determining cluster ID
-    DEFAULT_IP="$(ip a show ${DEFAULT_ROUTE_IFACE} | grep inet | grep -v inet6 | awk '{print $2}' | cut -f1 -d'/')"
     #get cattle node agent ID for docker inspect
     CATTLE_NODE_AGENT_ID=$(docker ps | grep -i k8s_agent_cattle-node-agent | cut -d' ' -f1)
     #get CATTLE_SERVER
@@ -370,6 +372,11 @@ if [[ "${CATTLE_SERVER}" == "" ]]; then
     checkpipecmd "Unable to determine CATTLE_SERVER on my own, please specify CATTLE_SERVER manually with -s."
     checknullvar "${CATTLE_SERVER}" "Unable to determine CATTLE_SERVER on my own, please specify CATTLE_SERVER manually with -s." "exit1"
 fi
+
+#remove spaces
+CATTLE_SERVER=${CATTLE_SERVER// /}
+#remove trailing //
+CATTLE_SERVER=$(sed 's:/*$::' <<<$CATTLE_SERVER)
 
 #Get a temporary login token
 LOGINTOKEN=$(curlcmd -k -s ''${CATTLE_SERVER}'/v3-public/localProviders/local?action=login' -H 'content-type: application/json' --data-binary '{"username":'\"${RANCHER_USERNAME}\"',"password":'\"${PASSWORD}\"',"ttl":'${TOKEN_TTL}'}' | jq -r .token)
@@ -382,6 +389,9 @@ if [[ "${CLUSTERID}" == "" ]]; then
     checkpipecmd "Unable to get CLUSTERID on my own, please set CLUSTERID manually with -c"
     #Store nodeId
     NODEID=$(jq -r '.data[]?.appliedSpec.rancherKubernetesEngineConfig.nodes[]? | select(.address == '\"${DEFAULT_IP}\"') | .nodeId' <<<${CLUSTERS})
+    if [[ ${NODEID// /} == "" ]]; then
+        NODEID=$(jq -r '.data[]?.appliedSpec.rancherKubernetesEngineConfig.nodes[]? | select(.internalAddress == '\"${DEFAULT_IP}\"') | .nodeId' <<<${CLUSTERS})
+    fi
     #Store CLUSTERID
     CLUSTERID=$(cut -d':' -f1 <<<${NODEID})
     checknullvar "${CLUSTERID}" 'Unable to get CLUSTERID on my own, please set CLUSTERID manually with -c.  Cluster ID for local rancher cluster deployed with RKE is "local".' "exit1"

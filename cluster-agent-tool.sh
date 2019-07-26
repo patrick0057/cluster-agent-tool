@@ -29,6 +29,8 @@ Usage: bash ${SCRIPT_NAME}
 
     -f              Automatically says yes to any questions asked by the script.  (Optional)
 
+    -l              Local binary for kubectl. (Optional)
+
     -a ['save']     Automatically applies cluster YAML for you.  This will also generate a kube config for your local cluster.  If you want to use the config file after the script has completed pass 'save' as shown below to save the kube config to ~/.kube/config.  (Optional)
             Example: -a'save'
 
@@ -56,7 +58,7 @@ Usage: bash ${SCRIPT_NAME}
 "
     exit 1
 }
-while getopts "hyfz:k:a:u:p:s:c:r:" opt; do
+while getopts "hlyfz:k:a:u:p:s:c:r:" opt; do
     case ${opt} in
     h) # process option h
         helpmenu
@@ -74,6 +76,9 @@ while getopts "hyfz:k:a:u:p:s:c:r:" opt; do
         ;;
     f) # process option f: automatically answer yes to all questions
         AUTOYES="yes"
+        ;;
+    l) # process option l: local binary
+        LOCALBINARY="yes"
         ;;
     r) # process option r: run agent command on node
         RUN_AGENT="yes"
@@ -201,17 +206,17 @@ function setusupthekubeconfig() {
     else
         SSLDIRPREFIX=${MANUALSSLPREFIX}
     fi
-    K_RESULT=$(kubectl --kubeconfig ${SSLDIRPREFIX}/ssl/kubecfg-kube-node.yaml get configmap -n kube-system full-cluster-state -o json 2>&1)
+    K_RESULT=$(kubectl --insecure-skip-tls-verify --kubeconfig ${SSLDIRPREFIX}/ssl/kubecfg-kube-node.yaml get configmap -n kube-system full-cluster-state -o json 2>&1)
     if [ "$?" == "0" ]; then
         grecho "Deployed with RKE 0.2.x and newer, grabbing kubeconfig"
-        kubectl --kubeconfig ${SSLDIRPREFIX}/ssl/kubecfg-kube-node.yaml get configmap -n kube-system full-cluster-state -o json | jq -r .data.\"full-cluster-state\" | jq -r .currentState.certificatesBundle.\"kube-admin\".config | sed -e "/^[[:space:]]*server:/ s_:.*_: \"https://127.0.0.1:6443\"_" | sed -e "/^[[:space:]]*server:/ s_:.*_: \"https://127.0.0.1:6443\"_" >${TMPDIR}/kubeconfig
+        kubectl --insecure-skip-tls-verify --kubeconfig ${SSLDIRPREFIX}/ssl/kubecfg-kube-node.yaml get configmap -n kube-system full-cluster-state -o json | jq -r .data.\"full-cluster-state\" | jq -r .currentState.certificatesBundle.\"kube-admin\".config | sed -e "/^[[:space:]]*server:/ s_:.*_: \"https://127.0.0.1:6443\"_" | sed -e "/^[[:space:]]*server:/ s_:.*_: \"https://127.0.0.1:6443\"_" >${TMPDIR}/kubeconfig
     else
         K_ERROR1=${K_RESULT}
     fi
-    K_RESULT=$(kubectl --kubeconfig ${SSLDIRPREFIX}/ssl/kubecfg-kube-node.yaml get secret -n kube-system kube-admin -o jsonpath={.data.Config} 2>&1)
+    K_RESULT=$(kubectl --insecure-skip-tls-verify --kubeconfig ${SSLDIRPREFIX}/ssl/kubecfg-kube-node.yaml get secret -n kube-system kube-admin -o jsonpath={.data.Config} 2>&1)
     if [ "$?" == "0" ]; then
         grecho "Deployed with RKE 0.1.x and older, grabbing kubeconfig"
-        kubectl --kubeconfig ${SSLDIRPREFIX}/ssl/kubecfg-kube-node.yaml get secret -n kube-system kube-admin -o jsonpath={.data.Config} | base64 -d | sed 's/[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}/127.0.0.1/g' >${TMPDIR}/kubeconfig
+        kubectl --insecure-skip-tls-verify --kubeconfig ${SSLDIRPREFIX}/ssl/kubecfg-kube-node.yaml get secret -n kube-system kube-admin -o jsonpath={.data.Config} | base64 -d | sed 's/[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}/127.0.0.1/g' >${TMPDIR}/kubeconfig
     else
         K_ERROR2=${K_RESULT}
     fi
@@ -309,7 +314,15 @@ if ! hash kubectl 2>/dev/null && [[ "${APPLY_YAML}" == "yes" ]]; then
     if [ "${INSTALL_MISSING_DEPENDENCIES}" == "yes" ] && [ "${OSTYPE}" == "linux-gnu" ]; then
         recho "Installing kubectl..."
         download "https://storage.googleapis.com/kubernetes-release/release/$(curlcmd -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
-        install -o root -g root -m 755 kubectl /bin/kubectl
+        if [ "${LOCALBINARY}" != "yes"]; then
+            install -o root -g root -m 755 kubectl /bin/kubectl
+        else
+            mkdir /tmp/kubebinary/
+            install -o root -g root -m 755 kubectl /tmp/kubebinary/kubectl
+            export PATH=${PATH}:/tmp/kubebinary/
+            echo to use kubectl from tmp, you need to export /tmp/kubebinary into your path as shown below.
+            echo 'export PATH=${PATH}:/tmp/kubebinary/'
+        fi
     else
         grecho "!!!kubectl was not found!!!"
         grecho "!!!download and install with:"

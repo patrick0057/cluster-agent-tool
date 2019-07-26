@@ -206,17 +206,19 @@ function setusupthekubeconfig() {
     else
         SSLDIRPREFIX=${MANUALSSLPREFIX}
     fi
-    K_RESULT=$(kubectl --insecure-skip-tls-verify --kubeconfig ${SSLDIRPREFIX}/ssl/kubecfg-kube-node.yaml get configmap -n kube-system full-cluster-state -o json 2>&1)
+    cp -arfv ${SSLDIRPREFIX}/ssl/kubecfg-kube-node.yaml /tmp/kubecfg-kube-node.yaml
+    sed -r 's,/etc/kubernetes,/opt/rke/etc/kubernetes/,g' /tmp/kubecfg-kube-node.yaml
+    K_RESULT=$(kubectl --insecure-skip-tls-verify --kubeconfig /tmp/kubecfg-kube-node.yaml get configmap -n kube-system full-cluster-state -o json 2>&1)
     if [ "$?" == "0" ]; then
         grecho "Deployed with RKE 0.2.x and newer, grabbing kubeconfig"
-        kubectl --insecure-skip-tls-verify --kubeconfig ${SSLDIRPREFIX}/ssl/kubecfg-kube-node.yaml get configmap -n kube-system full-cluster-state -o json | jq -r .data.\"full-cluster-state\" | jq -r .currentState.certificatesBundle.\"kube-admin\".config | sed -e "/^[[:space:]]*server:/ s_:.*_: \"https://127.0.0.1:6443\"_" | sed -e "/^[[:space:]]*server:/ s_:.*_: \"https://127.0.0.1:6443\"_" >${TMPDIR}/kubeconfig
+        kubectl --insecure-skip-tls-verify --kubeconfig /tmp/kubecfg-kube-node.yaml get configmap -n kube-system full-cluster-state -o json | jq -r .data.\"full-cluster-state\" | jq -r .currentState.certificatesBundle.\"kube-admin\".config | sed -e "/^[[:space:]]*server:/ s_:.*_: \"https://127.0.0.1:6443\"_" | sed -e "/^[[:space:]]*server:/ s_:.*_: \"https://127.0.0.1:6443\"_" >${TMPDIR}/kubeconfig
     else
         K_ERROR1=${K_RESULT}
     fi
-    K_RESULT=$(kubectl --insecure-skip-tls-verify --kubeconfig ${SSLDIRPREFIX}/ssl/kubecfg-kube-node.yaml get secret -n kube-system kube-admin -o jsonpath={.data.Config} 2>&1)
+    K_RESULT=$(kubectl --insecure-skip-tls-verify --kubeconfig /tmp/kubecfg-kube-node.yaml get secret -n kube-system kube-admin -o jsonpath={.data.Config} 2>&1)
     if [ "$?" == "0" ]; then
         grecho "Deployed with RKE 0.1.x and older, grabbing kubeconfig"
-        kubectl --insecure-skip-tls-verify --kubeconfig ${SSLDIRPREFIX}/ssl/kubecfg-kube-node.yaml get secret -n kube-system kube-admin -o jsonpath={.data.Config} | base64 -d | sed 's/[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}/127.0.0.1/g' >${TMPDIR}/kubeconfig
+        kubectl --insecure-skip-tls-verify --kubeconfig /tmp/kubecfg-kube-node.yaml get secret -n kube-system kube-admin -o jsonpath={.data.Config} | base64 -d | sed 's/[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}/127.0.0.1/g' >${TMPDIR}/kubeconfig
     else
         K_ERROR2=${K_RESULT}
     fi

@@ -207,7 +207,7 @@ function setusupthekubeconfig() {
         SSLDIRPREFIX=${MANUALSSLPREFIX}
     fi
     cp -arfv ${SSLDIRPREFIX}/ssl/kubecfg-kube-node.yaml /tmp/kubecfg-kube-node.yaml
-    sed -r 's,/etc/kubernetes,/opt/rke/etc/kubernetes/,g' /tmp/kubecfg-kube-node.yaml
+    sed -r -i 's,/etc/kubernetes,/opt/rke/etc/kubernetes/,g' /tmp/kubecfg-kube-node.yaml
     K_RESULT=$(kubectl --insecure-skip-tls-verify --kubeconfig /tmp/kubecfg-kube-node.yaml get configmap -n kube-system full-cluster-state -o json 2>&1)
     if [ "$?" == "0" ]; then
         grecho "Deployed with RKE 0.2.x and newer, grabbing kubeconfig"

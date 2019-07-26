@@ -314,7 +314,7 @@ if ! hash kubectl 2>/dev/null && [[ "${APPLY_YAML}" == "yes" ]]; then
     if [ "${INSTALL_MISSING_DEPENDENCIES}" == "yes" ] && [ "${OSTYPE}" == "linux-gnu" ]; then
         recho "Installing kubectl..."
         download "https://storage.googleapis.com/kubernetes-release/release/$(curlcmd -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
-        if [ "${LOCALBINARY}" != "yes"]; then
+        if [ "${LOCALBINARY}" != "yes" ]; then
             install -o root -g root -m 755 kubectl /bin/kubectl
         else
             mkdir /tmp/kubebinary/

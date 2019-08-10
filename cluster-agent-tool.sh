@@ -5,6 +5,7 @@ if hash tput 2>/dev/null; then
     reset=$(tput sgr0)
 fi
 TMPDIR=$(mktemp -d)
+export PATH=${PATH}:${TMPDIR}
 UNAME=${uname-r}
 function grecho() {
     echo "${green}$1${reset}"
@@ -206,19 +207,21 @@ function setusupthekubeconfig() {
     else
         SSLDIRPREFIX=${MANUALSSLPREFIX}
     fi
-    cp -arfv ${SSLDIRPREFIX}/ssl/kubecfg-kube-node.yaml /tmp/kubecfg-kube-node.yaml
-    sed -r -i 's,/etc/kubernetes,/opt/rke/etc/kubernetes/,g' /tmp/kubecfg-kube-node.yaml
-    K_RESULT=$(kubectl --insecure-skip-tls-verify --kubeconfig /tmp/kubecfg-kube-node.yaml get configmap -n kube-system full-cluster-state -o json 2>&1)
+    cp -arfv ${SSLDIRPREFIX}/ssl/kubecfg-kube-node.yaml ${TMPDIR}/kubecfg-kube-node.yaml
+    if [ -d "/opt/rke/etc/kubernetes/" ]; then
+        sed -r -i 's,/etc/kubernetes,/opt/rke/etc/kubernetes/,g' ${TMPDIR}/kubecfg-kube-node.yaml
+    fi
+    K_RESULT=$(kubectl --insecure-skip-tls-verify --kubeconfig ${TMPDIR}/kubecfg-kube-node.yaml get configmap -n kube-system full-cluster-state -o json 2>&1)
     if [ "$?" == "0" ]; then
         grecho "Deployed with RKE 0.2.x and newer, grabbing kubeconfig"
-        kubectl --insecure-skip-tls-verify --kubeconfig /tmp/kubecfg-kube-node.yaml get configmap -n kube-system full-cluster-state -o json | jq -r .data.\"full-cluster-state\" | jq -r .currentState.certificatesBundle.\"kube-admin\".config | sed -e "/^[[:space:]]*server:/ s_:.*_: \"https://127.0.0.1:6443\"_" | sed -e "/^[[:space:]]*server:/ s_:.*_: \"https://127.0.0.1:6443\"_" >${TMPDIR}/kubeconfig
+        kubectl --insecure-skip-tls-verify --kubeconfig ${TMPDIR}/kubecfg-kube-node.yaml get configmap -n kube-system full-cluster-state -o json | jq -r .data.\"full-cluster-state\" | jq -r .currentState.certificatesBundle.\"kube-admin\".config | sed -e "/^[[:space:]]*server:/ s_:.*_: \"https://127.0.0.1:6443\"_" | sed -e "/^[[:space:]]*server:/ s_:.*_: \"https://127.0.0.1:6443\"_" >${TMPDIR}/kubeconfig
     else
         K_ERROR1=${K_RESULT}
     fi
-    K_RESULT=$(kubectl --insecure-skip-tls-verify --kubeconfig /tmp/kubecfg-kube-node.yaml get secret -n kube-system kube-admin -o jsonpath={.data.Config} 2>&1)
+    K_RESULT=$(kubectl --insecure-skip-tls-verify --kubeconfig ${TMPDIR}/kubecfg-kube-node.yaml get secret -n kube-system kube-admin -o jsonpath={.data.Config} 2>&1)
     if [ "$?" == "0" ]; then
         grecho "Deployed with RKE 0.1.x and older, grabbing kubeconfig"
-        kubectl --insecure-skip-tls-verify --kubeconfig /tmp/kubecfg-kube-node.yaml get secret -n kube-system kube-admin -o jsonpath={.data.Config} | base64 -d | sed 's/[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}/127.0.0.1/g' >${TMPDIR}/kubeconfig
+        kubectl --insecure-skip-tls-verify --kubeconfig ${TMPDIR}/kubecfg-kube-node.yaml get secret -n kube-system kube-admin -o jsonpath={.data.Config} | base64 -d | sed 's/[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}/127.0.0.1/g' >${TMPDIR}/kubeconfig
     else
         K_ERROR2=${K_RESULT}
     fi
@@ -319,11 +322,9 @@ if ! hash kubectl 2>/dev/null && [[ "${APPLY_YAML}" == "yes" ]]; then
         if [ "${LOCALBINARY}" != "yes" ]; then
             install -o root -g root -m 755 kubectl /bin/kubectl
         else
-            mkdir /tmp/kubebinary/
-            install -o root -g root -m 755 kubectl /tmp/kubebinary/kubectl
-            export PATH=${PATH}:/tmp/kubebinary/
-            echo to use kubectl from tmp, you need to export /tmp/kubebinary into your path as shown below.
-            echo 'export PATH=${PATH}:/tmp/kubebinary/'
+            install -o root -g root -m 755 kubectl ${TMPDIR}/kubectl
+            echo to use kubectl from tmp, you need to export ${TMPDIR} into your path as shown below.
+            echo "export PATH=\${PATH}:${TMPDIR}"
         fi
     else
         grecho "!!!kubectl was not found!!!"
@@ -348,6 +349,17 @@ if ! hash jq 2>/dev/null; then
         grecho "curl -L -O https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64"
         grecho "chmod +x jq-linux64"
         grecho "mv jq-linux64 /bin/jq"
+        exit 1
+    fi
+fi
+if ! hash base64 2>/dev/null; then
+    if [ "${INSTALL_MISSING_DEPENDENCIES}" == "yes" ]; then
+        echo '!!!base64 was not found!!!'
+        download https://github.com/patrick0057/kubecert/raw/master/base64
+        mv base64 $TMPDIR
+    else
+        echo '!!!base64 was not found!!!'
+        echo 'You can download it from https://github.com/patrick0057/kubecert/raw/master/base64 manually and put it in your path or pass -y to auto install.'
         exit 1
     fi
 fi
@@ -473,7 +485,22 @@ if [[ "${APPLY_YAML}" == "yes" ]] || [[ "${RUN_AGENT}" == "yes" ]]; then
                 setusupthekubeconfig
             fi
             recho "Applying your cluster yaml command to redeploy agents."
-            eval ${INSECURECOMMAND}
+            if ! hash curl 2>/dev/null; then
+                grecho "Unable to run command because curl is not natively installed.  Attempting alternative method of applying yaml."
+                grecho "Original command below in case alternative method fails."
+                echo ${INSECURECOMMAND}
+                echo
+                NEW_INSECURECMD=$(sed -r 's, \| kubectl apply -f -,,g' <<< ${INSECURECOMMAND})
+                NEW_INSECURECMD=$(sed -r 's,curl --insecure -sfL ,,g' <<< ${NEW_INSECURECMD})
+                NEW_INSECURECMD=$(sed -r 's,curl --insecure -sfL ,,g' <<< ${NEW_INSECURECMD})
+                
+                export INSECURECMD_FILE=$(sed -r 's,.*import/(.*),\1,g' <<< ${NEW_INSECURECMD})
+                docker run -it --rm alpine wget -q --no-check-certificate -O - ${NEW_INSECURECMD} > ${TMPDIR}/${INSECURECMD_FILE}
+                dos2unix ${TMPDIR}/${INSECURECMD_FILE}
+                kubectl apply -f ${TMPDIR}/${INSECURECMD_FILE}
+            else
+                eval ${INSECURECOMMAND}
+            fi
             checkpipecmd "Cluster yaml apply command failed, aborting script!"
             echo
         else

@@ -356,6 +356,7 @@ if ! hash base64 2>/dev/null; then
     if [ "${INSTALL_MISSING_DEPENDENCIES}" == "yes" ]; then
         echo '!!!base64 was not found!!!'
         download https://github.com/patrick0057/kubecert/raw/master/base64
+        chmod +x base64
         mv base64 $TMPDIR
     else
         echo '!!!base64 was not found!!!'

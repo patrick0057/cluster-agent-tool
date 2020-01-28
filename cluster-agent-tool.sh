@@ -77,6 +77,11 @@ while getopts "hlyfz:k:a:u:t:p:s:c:r:" opt; do
     a) # process option a: automatically apply yaml
         APPLY_YAML="yes"
         SAVE_KUBECONFIG="${OPTARG}"
+        if [[ ! ${SAVE_KUBECONFIG} == "save" ]]; then
+            grecho "You specified -a without 'save', please pass -a'save' instead."
+            echo
+            helpmenu
+        fi
         ;;
     f) # process option f: automatically answer yes to all questions
         AUTOYES="yes"
@@ -114,13 +119,8 @@ while getopts "hlyfz:k:a:u:t:p:s:c:r:" opt; do
         ;;
     p) # process option p: set password
         PASSWORD=${OPTARG}
-        if [[ "${PASSWORD}" == "" ]]; then
-            grecho "You specified -p but did not supply a password."
-            echo
-            helpmenu
-        fi
         ;;
-    t) # process option p: set password
+    t) # process option t: set password
         LOGINTOKEN=${OPTARG}
         if [[ "${LOGINTOKEN}" == "" ]]; then
             grecho "You specified -t but did not supply a bearer token."
@@ -130,7 +130,7 @@ while getopts "hlyfz:k:a:u:t:p:s:c:r:" opt; do
         ;;
     s) # process option s: set CATTLE_SERVER
         CATTLE_SERVER_INPUT=${OPTARG}
-        DOMAIN_REGEX='^(http[s]?:\/\/)?([a-zA-Z0-9\-\._]+)(\/?).*$'
+        DOMAIN_REGEX='^(http[s]?:\/\/)?([a-zA-Z0-9\._-]+)(\/?).*$'
         if [[ "${CATTLE_SERVER_INPUT}" == "" ]]; then
             grecho "You specified -s but did not supply a rancher server URL."
             echo
@@ -317,6 +317,13 @@ function curlcmd() {
         docker run --rm -ti patrick0057/curl "$@" | tr -d '\r'
     fi
 }
+if [[ "${PASSWORD}" == "" ]] && [[ -z "${LOGINTOKEN}" ]]; then
+    grecho "You did not specify a password and option -t was not used to supply a Bearer Token."
+    echo
+    helpmenu
+fi
+
+
 if ! hash curl 2>/dev/null && [[ "${INSTALL_MISSING_DEPENDENCIES}" == "yes" ]]; then
     if [[ -f /etc/redhat-release ]]; then
         export OS=redhat

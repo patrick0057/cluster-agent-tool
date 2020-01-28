@@ -130,7 +130,7 @@ while getopts "hlyfz:k:a:u:t:p:s:c:r:" opt; do
         ;;
     s) # process option s: set CATTLE_SERVER
         CATTLE_SERVER_INPUT=${OPTARG}
-        DOMAIN_REGEX='^(http[s]?:\/\/)?([a-zA-Z0-9\._]+)(\/?).*$'
+        DOMAIN_REGEX='^(http[s]?:\/\/)?([a-zA-Z0-9\-\._]+)(\/?).*$'
         if [[ "${CATTLE_SERVER_INPUT}" == "" ]]; then
             grecho "You specified -s but did not supply a rancher server URL."
             echo
